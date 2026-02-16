@@ -39,6 +39,19 @@
     .item .top { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
     .tag { font-size:12px; padding:2px 8px; border-radius:999px; background:#1a2442; border:1px solid #2a3a63; opacity:.95; }
     .footer { margin-top:14px; font-size:12px; opacity:.7; text-align:center; }
+
+    /* 小号“符号块” */
+    .sym {
+      flex: 0 0 auto;
+      text-align:center;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid #2a3a63;
+      background:#0f1730;
+      font-weight:800;
+      font-size: 22px;
+      min-width: 44px;
+    }
   </style>
 </head>
 <body>
@@ -72,20 +85,27 @@
     <div class="divider"></div>
 
     <div id="question" class="question">--</div>
-    <div class="hint" id="hint">输入格式：分数用 a/b（如 1/8 或 1/2.5），百分数用 12.5% 或 12.5</div>
+    <div class="hint" id="hint">输入区会自动显示 “/” 或 “%”，你只需要填数字。</div>
 
-    <div class="row" style="margin-top:10px;">
-      <input
-  id="answer"
-  type="text"
-  inputmode="text"
-  placeholder="在这里输入答案…（分数用 1/3，百分数用 33.3%）"
-  autocomplete="off"
-  autocapitalize="off"
-  autocorrect="off"
-  spellcheck="false"
-/>
+    <!-- 分数输入：显示 1 / [分母]（用于 百分数→分数） -->
+    <div id="fracWrap" style="display:none; margin-top:10px;">
+      <div class="row" style="gap:8px; align-items:center;">
+        <div class="sym">1</div>
+        <div class="sym">/</div>
+        <input id="denOnly" type="number" step="0.5" inputmode="decimal" placeholder="填分母，如 3.5" />
+      </div>
+      <div class="hint">只填分母：例如填 3.5 表示 1/3.5</div>
     </div>
+
+    <!-- 百分数输入：显示 [数字] %（用于 分数→百分数） -->
+    <div id="pctWrap" style="display:none; margin-top:10px;">
+      <div class="row" style="gap:8px; align-items:center;">
+        <input id="pctOnly" type="number" step="0.1" inputmode="decimal" placeholder="填数字，如 33.3" />
+        <div class="sym">%</div>
+      </div>
+      <div class="hint">只填数字：例如填 33.3 表示 33.3%</div>
+    </div>
+
     <div class="row" style="margin-top:10px;">
       <button id="submitBtn">提交</button>
       <button class="secondary" id="revealBtn">显示答案</button>
@@ -115,7 +135,10 @@
 </div>
 
 <script>
-/** ---------- 基础数学 ---------- **/
+/** ---------- 工具：DOM ---------- **/
+const el = (id) => document.getElementById(id);
+
+/** ---------- 基础数学（整数分数） ---------- **/
 function gcd(a, b) {
   a = Math.abs(a); b = Math.abs(b);
   while (b !== 0) { const t = a % b; a = b; b = t; }
@@ -124,8 +147,10 @@ function gcd(a, b) {
 function simplifyFrac(n, d) {
   if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
   if (d < 0) { n = -n; d = -d; }
-  const g = gcd(Math.trunc(n), Math.trunc(d));
-  return { n: Math.trunc(n) / g, d: Math.trunc(d) / g, g };
+  const nn = Math.trunc(n);
+  const dd = Math.trunc(d);
+  const g = gcd(nn, dd);
+  return { n: nn / g, d: dd / g, g };
 }
 function fracToString(fr) {
   return fr.d === 1 ? String(fr.n) : `${fr.n}/${fr.d}`;
@@ -134,7 +159,7 @@ function fracEqual(a, b) {
   return a.n === b.n && a.d === b.d;
 }
 
-/** ---------- 解析：支持小数分母 1/2.5 ---------- **/
+/** ---------- 小数转有理数（精确表示有限小数） ---------- **/
 function toRational(x) {
   const s = String(x).trim();
   if (s.includes("e") || s.includes("E")) {
@@ -150,8 +175,8 @@ function toRational(x) {
   return simplifyFrac(n, d);
 }
 
+/** ---------- 解析：支持 1/2.5 等形式 ---------- **/
 function parseFraction(str) {
-  // 支持 "a/b" 或 "a"，且 a、b 可为小数
   const s = str.trim();
   if (!s) return null;
 
@@ -163,8 +188,8 @@ function parseFraction(str) {
     const b = Number(parts[1].trim());
     if (!Number.isFinite(a) || !Number.isFinite(b) || b === 0) return null;
 
-    const ra = toRational(a); // a = ra.n/ra.d
-    const rb = toRational(b); // b = rb.n/rb.d
+    const ra = toRational(a);
+    const rb = toRational(b);
     if (!ra || !rb || rb.n === 0) return null;
 
     // (ra.n/ra.d) / (rb.n/rb.d) = ra.n*rb.d / (ra.d*rb.n)
@@ -185,12 +210,12 @@ function parsePercent(str) {
   if (s.endsWith("%")) s = s.slice(0, -1).trim();
   const v = Number(s);
   if (!Number.isFinite(v)) return null;
-  return v; // 数值：12.5 表示 12.5%
+  return v; // 12.5 表示 12.5%
 }
 
-/** ---------- 百分数<->分数 ---------- **/
+/** ---------- 转换 ---------- **/
 function percentToFrac(p) {
-  // p% = p/100，支持小数
+  // p% = p/100（用于随机题库的反推，固定题库不用这个生成答案）
   const s = String(p);
   let n, d;
   if (s.includes("e") || s.includes("E")) {
@@ -213,7 +238,7 @@ function fracToPercent(fr) {
   return (fr.n / fr.d) * 100;
 }
 
-/** ---------- 题库：你指定的固定列表 1/(2~23含0.5) ---------- **/
+/** ---------- 固定题库：1/(2~23 含0.5) ---------- **/
 const DENOMS = [
   2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5,
   10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5,
@@ -222,22 +247,21 @@ const DENOMS = [
 
 function fmtPercentFromDenom(d) {
   const p = 100 / d;
-  const r = Math.round(p * 10) / 10; // 1位小数
+  const r = Math.round(p * 10) / 10; // 1 位小数
   return (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}%` : `${r}%`;
 }
 function fracDisplayFromDenom(d) {
-  return `1/${d}`; // 按你的显示习惯保留小数分母
+  return `1/${d}`; // 按你的记忆方式显示（保留 2.5、3.5）
 }
 
 const FIXED_BANK = (() => {
   const list = [];
-
   for (const d of DENOMS) {
     const fDisp = fracDisplayFromDenom(d);   // "1/2.5"
     const pDisp = fmtPercentFromDenom(d);    // "40%" 或 "33.3%"
-    const pVal = parseFloat(pDisp.replace("%","")); // 用显示值作为数值（避免浮点长尾）
+    const pVal = parseFloat(pDisp.replace("%","")); // 用展示值作为数值（避免 33.333333333... 长尾）
 
-    // 用“分母转有理数”精确算出 1/d
+    // 精确答案：1/d（把 d 先转有理数，再取倒数）
     const dRat = toRational(d);              // d = dRat.n / dRat.d
     const exactFrac = simplifyFrac(dRat.d, dRat.n); // 1/d = dRat.d / dRat.n
 
@@ -245,20 +269,19 @@ const FIXED_BANK = (() => {
     list.push({
       type: "f2p",
       display: fDisp,
-      frac: { n: 1, d: d },     // 允许小数分母，判题会转有理数
+      frac: { n: 1, d: d },    // 小数分母允许，判题时转有理数
       ansP: pDisp
     });
 
-    // 百分数 -> 分数（关键：答案直接用 exactFrac，不再从 pVal 反推）
+    // 百分数 -> 分数
     list.push({
       type: "p2f",
       display: pDisp,
-      p: pVal,                  // 只用于展示/容错，不用于生成答案
-      ansFrac: exactFrac,        // ✅ 精确答案
+      p: pVal,                 // 只用于展示/容错
+      ansFrac: exactFrac,       // ✅ 精确答案（不再由百分数反推）
       displayFrac: fDisp
     });
   }
-
   return list;
 })();
 
@@ -273,18 +296,17 @@ function genRandomFracQuestion() {
   return { type:"f2p", display:`${fr.n}/${fr.d}`, frac:fr, ansP:null };
 }
 function genRandomPercentQuestion() {
-  // 通过随机分数生成百分数（尽量好化）
   const d = choice([2,4,5,8,10,20,25,40]);
   const n = randInt(1, d - 1);
   const fr = simplifyFrac(n, d);
   const p = fracToPercent(fr);
   const r = Math.round(p * 10) / 10;
   const disp = (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}%` : `${r}%`;
-  return { type:"p2f", display:disp, p:r, ansFrac:null };
+  return { type:"p2f", display:disp, p:r, ansFrac:null, displayFrac:null };
 }
 
 /** ---------- 错题本 ---------- **/
-const LS_KEY = "pct_frac_mistakes_v2";
+const LS_KEY = "pct_frac_mistakes_v3";
 function loadMistakes() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || "[]"); }
   catch { return []; }
@@ -316,7 +338,6 @@ function pickQuestion({ mode, bank, fromMistakes=false, mistakes=[] }) {
   const needType = mode === "mix" ? null : mode;
 
   if (fromMistakes && mistakes.length) {
-    // 错题本：也支持混合（仍然 50/50 尝试挑题型）
     if (!needType) {
       const t = Math.random() < 0.5 ? "p2f" : "f2p";
       const pool = mistakes.filter(x => x.type === t);
@@ -329,9 +350,8 @@ function pickQuestion({ mode, bank, fromMistakes=false, mistakes=[] }) {
     if (bank === "fixed") {
       const candidates = FIXED_BANK;
       let pool;
-      if (needType) {
-        pool = candidates.filter(x => x.type === needType);
-      } else {
+      if (needType) pool = candidates.filter(x => x.type === needType);
+      else {
         const t = Math.random() < 0.5 ? "p2f" : "f2p";
         pool = candidates.filter(x => x.type === t);
       }
@@ -344,23 +364,26 @@ function pickQuestion({ mode, bank, fromMistakes=false, mistakes=[] }) {
     }
   }
 
-  // 补齐标准答案
+  // 补齐标准答案（主要给 random 用）
   if (q.type === "p2f" && !q.ansFrac) q.ansFrac = percentToFrac(q.p);
   if (q.type === "f2p" && !q.ansP) {
     const p = fracToPercent(q.frac);
     const r = Math.round(p * 10) / 10;
     q.ansP = (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}%` : `${r}%`;
   }
-
   return q;
 }
 
 /** ---------- UI 状态 ---------- **/
-const el = (id) => document.getElementById(id);
 const modeEl = el("mode"), bankEl = el("bank");
-const questionEl = el("question"), answerEl = el("answer");
+const questionEl = el("question");
 const msgEl = el("msg"), accEl = el("acc"), streakEl = el("streak"), timeEl = el("time");
 const mistakesPanel = el("mistakesPanel"), mistakesList = el("mistakesList");
+
+const fracWrap = el("fracWrap");
+const pctWrap  = el("pctWrap");
+const denOnly  = el("denOnly");
+const pctOnly  = el("pctOnly");
 
 let state = {
   q: null,
@@ -418,10 +441,25 @@ function renderMistakes() {
   }
 }
 
+function setInputModeForQuestion(q) {
+  denOnly.value = "";
+  pctOnly.value = "";
+
+  if (q.type === "p2f") {
+    // % -> 分数：只填分母
+    fracWrap.style.display = "block";
+    pctWrap.style.display = "none";
+    denOnly.focus();
+  } else {
+    // 分数 -> %：只填数字
+    fracWrap.style.display = "none";
+    pctWrap.style.display = "block";
+    pctOnly.focus();
+  }
+}
+
 function newQuestion() {
   clearMsg();
-  answerEl.value = "";
-  answerEl.focus();
 
   const mode = modeEl.value;
   const bank = bankEl.value;
@@ -436,9 +474,11 @@ function newQuestion() {
 
   questionEl.textContent = state.q.display;
   state.startAt = performance.now();
+  setInputModeForQuestion(state.q);
 
-  if (state.q.type === "p2f") el("hint").textContent = "输入分数：a/b（如 1/8 或 1/2.5）。会按“最简分数”判定通过。";
-  else el("hint").textContent = "输入百分数：如 12.5% 或 12.5（默认保留 1 位小数的答案）。";
+  el("hint").textContent = (state.q.type === "p2f")
+    ? "本题：百分数 → 分数。界面已显示 “1/”，你只需要填分母。"
+    : "本题：分数 → 百分数。界面已显示 “%”，你只需要填数字。";
 
   updateStats(0);
 }
@@ -455,10 +495,17 @@ function submit() {
   if (!q) return;
 
   const dtSec = (performance.now() - state.startAt) / 1000;
-  const raw = answerEl.value.trim();
-  if (!raw) {
-    showMsg("请先输入答案。", false);
-    return;
+
+  // 读取用户输入（只读数字）
+  let raw = "";
+  if (q.type === "p2f") {
+    const den = denOnly.value.trim();
+    if (!den) { showMsg("请填写分母（如 3.5）。", false); return; }
+    raw = `1/${den}`; // 拼成分数给 parseFraction
+  } else {
+    const pct = pctOnly.value.trim();
+    if (!pct) { showMsg("请输入百分数数字（如 33.3）。", false); return; }
+    raw = pct; // 不需要 %
   }
 
   state.total += 1;
@@ -466,43 +513,19 @@ function submit() {
   if (q.type === "p2f") {
     const user = parseFraction(raw);
     if (!user) {
-      state.total -= 1; // 不算题
-      showMsg("分数格式不对：请用 a/b（如 1/8 或 1/2.5）或整数。", false);
+      state.total -= 1;
+      showMsg("分母格式不对：请只输入数字（如 3 或 3.5）。", false);
       return;
     }
 
     const correct = simplifyFrac(q.ansFrac.n, q.ansFrac.d);
-
-    // 等值判断
     const eq = fracEqual(user, correct);
 
-    // 最简分数判断：只有当用户确实输入了“整数分子/整数分母”时才严格要求最简
-    // 如果用户用了小数（如 1/2.5），我们仍按等值通过（否则体验很别扭）
-    let requireSimplest = true;
-    let isSimplest = true;
-
-    if (raw.includes("/")) {
-      const parts = raw.split("/");
-      const aStr = parts[0].trim(), bStr = parts[1].trim();
-      const aIsInt = /^[+-]?\d+$/.test(aStr);
-      const bIsInt = /^[+-]?\d+$/.test(bStr);
-      if (aIsInt && bIsInt) {
-        const a0 = Number(aStr), b0 = Number(bStr);
-        isSimplest = (gcd(a0, b0) === 1);
-      } else {
-        // 含小数分母/分子时，不强制“最简”规则（否则 1/2.5 永远不可能是最简）
-        requireSimplest = false;
-      }
-    }
-
-    if (eq && (!requireSimplest || isSimplest)) {
+    // 你现在只填分母，不需要“最简分数”规则，等值即算对
+    if (eq) {
       state.correct += 1;
       state.streak += 1;
       showMsg(`✅ 正确！用时 ${dtSec.toFixed(1)}s`, true);
-    } else if (eq && requireSimplest && !isSimplest) {
-      state.streak = 0;
-      showMsg(`⚠️ 等值但不是最简分数。最简为：${fracToString(correct)}（本题按未通过处理）`, false);
-      addMistake(q);
     } else {
       state.streak = 0;
       showMsg(`❌ 错误。正确答案：${q.displayFrac || fracToString(correct)}`, false);
@@ -512,11 +535,10 @@ function submit() {
   } else { // f2p
     const userP = parsePercent(raw);
     if (userP === null) {
-      state.total -= 1; // 不算题
-      showMsg("百分数格式不对：如 12.5% 或 12.5。", false);
+      state.total -= 1;
+      showMsg("请输入数字（如 33.3），不用写 %。", false);
       return;
     }
-
     const correctP = parsePercent(q.ansP);
     const ok = Math.abs(userP - correctP) < 1e-9;
 
@@ -539,9 +561,9 @@ el("newBtn").addEventListener("click", newQuestion);
 el("submitBtn").addEventListener("click", submit);
 el("revealBtn").addEventListener("click", revealAnswer);
 
-answerEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") submit();
-});
+// 让手机键盘“完成/回车”也能提交
+denOnly.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+pctOnly.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
 
 el("toggleMistakesBtn").addEventListener("click", () => {
   const show = mistakesPanel.style.display === "none";
