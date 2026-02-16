@@ -222,28 +222,34 @@ function fracDisplayFromDenom(d) {
 
 const FIXED_BANK = (() => {
   const list = [];
+
   for (const d of DENOMS) {
-    const fDisp = fracDisplayFromDenom(d);
-    const pDisp = fmtPercentFromDenom(d);
-    const pVal = 100 / d;
+    const fDisp = fracDisplayFromDenom(d);   // "1/2.5"
+    const pDisp = fmtPercentFromDenom(d);    // "40%" 或 "33.3%"
+    const pVal = parseFloat(pDisp.replace("%","")); // 用显示值作为数值（避免浮点长尾）
+
+    // 用“分母转有理数”精确算出 1/d
+    const dRat = toRational(d);              // d = dRat.n / dRat.d
+    const exactFrac = simplifyFrac(dRat.d, dRat.n); // 1/d = dRat.d / dRat.n
 
     // 分数 -> 百分数
     list.push({
       type: "f2p",
       display: fDisp,
-      frac: { n: 1, d: d },    // 小数分母允许（判题时会转有理数）
+      frac: { n: 1, d: d },     // 允许小数分母，判题会转有理数
       ansP: pDisp
     });
 
-    // 百分数 -> 分数
+    // 百分数 -> 分数（关键：答案直接用 exactFrac，不再从 pVal 反推）
     list.push({
       type: "p2f",
       display: pDisp,
-      p: pVal,
-      ansFrac: null,           // 出题时补齐
-      displayFrac: fDisp       // 你希望显示的答案形式（可选）
+      p: pVal,                  // 只用于展示/容错，不用于生成答案
+      ansFrac: exactFrac,        // ✅ 精确答案
+      displayFrac: fDisp
     });
   }
+
   return list;
 })();
 
