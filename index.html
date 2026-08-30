@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>刷题：百分数↔分数 + 平方 + 立方</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>刷题：百分数、分数与幂运算</title>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
     body { margin: 0; background:#0b1220; color:#e8eefc; }
@@ -39,6 +41,12 @@
     .item .top { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
     .tag { font-size:12px; padding:2px 8px; border-radius:999px; background:#1a2442; border:1px solid #2a3a63; opacity:.95; }
     .footer { margin-top:14px; font-size:12px; opacity:.7; text-align:center; }
+    .support { margin-top:14px; text-align:center; }
+    .support button { width:auto; min-width:150px; }
+    dialog { max-width:min(92vw, 420px); border:1px solid #2a3a63; border-radius:16px; background:#121b2e; color:#e8eefc; padding:18px; }
+    dialog::backdrop { background:rgba(0,0,0,.65); }
+    dialog img { display:block; width:100%; max-height:68vh; object-fit:contain; border-radius:10px; background:#fff; }
+    dialog .dialog-actions { margin-top:12px; text-align:right; }
     .sym {
       flex: 0 0 auto;
       text-align:center;
@@ -62,8 +70,10 @@
         <label>训练</label>
         <select id="training">
           <option value="pctfrac" selected>百分数 ↔ 分数</option>
-          <option value="squares">平方数（1–20）</option>
+          <option value="squares">平方数（1–30）</option>
           <option value="cubes">立方数（1–16）</option>
+          <option value="fourthPowers">四次幂（1–12）</option>
+          <option value="multiplication">大九九（1–19）</option>
         </select>
       </div>
 
@@ -107,7 +117,7 @@
     <div class="divider"></div>
 
     <div id="question" class="question">--</div>
-    <div class="hint" id="hint">输入区会自动显示 “/” 或 “%”，平方/立方训练只填数字。</div>
+    <div class="hint" id="hint">输入区会自动显示 “/” 或 “%”，幂运算训练只填数字。</div>
 
     <!-- 百分数↔分数：%→分数：显示 1 / [分母] -->
     <div id="fracWrap" style="display:none; margin-top:10px;">
@@ -160,9 +170,20 @@
       <div class="list" id="mistakesList" style="margin-top:10px;"></div>
     </div>
 
+    <div class="support">
+      <button class="secondary" id="supportBtn" type="button">支持作者</button>
+    </div>
+
     <div class="footer">手机浏览器菜单 → “添加到主屏幕” 可像App一样使用。</div>
   </div>
 </div>
+
+<dialog id="supportDialog" aria-labelledby="supportTitle">
+  <h2 id="supportTitle">支持作者</h2>
+  <p class="small">如果这个工具对你有帮助，可以自愿支持。支持不会影响任何功能。</p>
+  <img src="assets-alipay.jpg" alt="支付宝收款二维码，请使用支付宝扫码" />
+  <div class="dialog-actions"><button class="secondary" id="closeSupportBtn" type="button">关闭</button></div>
+</dialog>
 
 <script>
 /** ---------- DOM ---------- **/
@@ -248,6 +269,12 @@ function percentToFrac(p) {
   return simplifyFrac(n, d);
 }
 function fracToPercent(fr) { return (fr.n / fr.d) * 100; }
+function formatPercentValue(value) {
+  const rounded = Math.round(value * 10) / 10;
+  return (Math.abs(rounded - Math.round(rounded)) < 1e-9)
+    ? `${Math.round(rounded)}%`
+    : `${rounded}%`;
+}
 
 /** ---------- 百分数↔分数：固定题库 ---------- **/
 const DENOMS = [
@@ -286,7 +313,8 @@ function genRandomFracQuestion() {
   const d = randInt(2, 20);
   const n = randInt(1, d - 1);
   const fr = simplifyFrac(n, d);
-  return { kind:"pctfrac", type:"f2p", display:`${fr.n}/${fr.d}`, frac:fr, ansP:null };
+  const ansP = formatPercentValue(fracToPercent(fr));
+  return { kind:"pctfrac", type:"f2p", display:`${fr.n}/${fr.d}`, frac:fr, ansP };
 }
 function genRandomPercentQuestion() {
   const d = choice([2,4,5,8,10,20,25,40]);
@@ -294,18 +322,22 @@ function genRandomPercentQuestion() {
   const fr = simplifyFrac(n, d);
   const p = fracToPercent(fr);
   const r = Math.round(p * 10) / 10;
-  const disp = (Math.abs(r - Math.round(r)) < 1e-9) ? `${Math.round(r)}%` : `${r}%`;
-  return { kind:"pctfrac", type:"p2f", display:disp, p:r, ansFrac:null, displayFrac:null };
+  const disp = formatPercentValue(r);
+  return { kind:"pctfrac", type:"p2f", display:disp, p:r, ansFrac:fr, displayFrac:fracToString(fr) };
 }
 
-/** ---------- 平方 / 立方 题库 ---------- **/
-const SQUARES = Array.from({length:20}, (_,i)=>{ const n=i+1; return {n, val:n*n}; });
-const CUBES   = Array.from({length:16}, (_,i)=>{ const n=i+1; return {n, val:n*n*n}; });
+/** ---------- 幂运算 / 大九九题库 ---------- **/
+const POWER_BANKS = {
+  squares: { k: 2, max: 30 },
+  cubes: { k: 3, max: 16 },
+  fourthPowers: { k: 4, max: 12 },
+};
 
 function pickPowerQuestion(kind, mode) {
-  const arr = (kind === "squares") ? SQUARES : CUBES;
-  const k = (kind === "squares") ? 2 : 3;
-  const item = choice(arr);
+  const config = POWER_BANKS[kind];
+  const n = randInt(1, config.max);
+  const item = { n, val: n ** config.k };
+  const k = config.k;
 
   let dir = mode;
   if (mode === "mix") dir = (Math.random() < 0.5 ? "forward" : "reverse");
@@ -317,6 +349,12 @@ function pickPowerQuestion(kind, mode) {
   }
 }
 
+function pickMultiplicationQuestion() {
+  const a = randInt(1, 19);
+  const b = randInt(1, 19);
+  return { kind:"multiplication", prompt:`${a} × ${b}`, answer:String(a * b), a, b };
+}
+
 /** ---------- 错题本 ---------- **/
 const LS_KEY = "trainer_mistakes_v2";
 function loadMistakes() {
@@ -326,6 +364,7 @@ function loadMistakes() {
 function saveMistakes(list) { localStorage.setItem(LS_KEY, JSON.stringify(list)); }
 function mistakeKey(q) {
   if (q.kind === "pctfrac") return `pctfrac|${q.type}|${q.display}`;
+  if (q.kind === "multiplication") return `multiplication|${q.a}|${q.b}`;
   return `${q.kind}|${q.dir}|${q.prompt}`;
 }
 function addMistake(q) {
@@ -388,7 +427,15 @@ function pickQuestion() {
     return pickPctFracQuestion({ mode, bank });
   }
 
-  // squares / cubes
+  if (training === "multiplication") {
+    if (practiceMistakes) {
+      const q = choice(loadMistakes().filter(x => x.kind === "multiplication"));
+      if (q) return q;
+    }
+    return pickMultiplicationQuestion();
+  }
+
+  // squares / cubes / fourth powers
   const mode = el("modePowers").value;
   if (practiceMistakes) {
     const q = pickFromMistakes(training, mode);
@@ -412,6 +459,9 @@ let state = {
   streak: 0,
   startAt: performance.now(),
   practiceMistakes: false,
+  answered: false,
+  nextTimer: null,
+  lastQuestionKey: null,
 };
 
 function showMsg(text, ok=null) {
@@ -449,8 +499,16 @@ function renderMistakes() {
       tagText = (m.type === "p2f" ? "%→分数" : "分数→%");
       prompt = m.display;
       ans = (m.type === "p2f") ? (m.displayFrac || fracToString(m.ansFrac)) : m.ansP;
+    } else if (m.kind === "multiplication") {
+      tagText = "大九九";
+      prompt = m.prompt;
+      ans = m.answer;
     } else if (m.kind === "squares") {
       tagText = (m.dir === "forward" ? "平方：正向" : "平方：逆向");
+      prompt = m.prompt;
+      ans = m.answer;
+    } else if (m.kind === "fourthPowers") {
+      tagText = (m.dir === "forward" ? "四次幂：正向" : "四次幂：逆向");
       prompt = m.prompt;
       ans = m.answer;
     } else {
@@ -476,7 +534,7 @@ function renderMistakes() {
 function syncUIByTraining() {
   const training = el("training").value;
   el("pctfracModeWrap").style.display = (training === "pctfrac") ? "block" : "none";
-  el("powerModeWrap").style.display   = (training !== "pctfrac") ? "block" : "none";
+  el("powerModeWrap").style.display   = POWER_BANKS[training] ? "block" : "none";
   el("bankWrap").style.display        = (training === "pctfrac") ? "block" : "none";
 }
 
@@ -501,22 +559,39 @@ function setInputModeForQuestion(q) {
     pctWrap.style.display = "none";
     powerWrap.style.display = "block";
     powerOnly.focus();
-    const name = (q.kind === "squares") ? "平方" : "立方";
-    const exp = (q.kind === "squares") ? "²" : "³";
-    el("powerHint").textContent = (q.dir === "forward")
-      ? `${name}正向：题目给 n，请输入 n${exp}（只填数字）`
-      : `${name}逆向：题目给 n${exp}，请输入底数 n（只填数字）`;
-    el("hint").textContent = (q.dir === "forward")
-      ? `${name}训练（正向）：只填结果数字`
-      : `${name}训练（逆向）：只填底数数字`;
+    if (q.kind === "multiplication") {
+      el("powerHint").textContent = "大九九：请输入乘积（只填整数）";
+      el("hint").textContent = "大九九训练（1–19）：只填结果数字";
+    } else {
+      const names = { squares:"平方", cubes:"立方", fourthPowers:"四次幂" };
+      const exps = { squares:"²", cubes:"³", fourthPowers:"⁴" };
+      const name = names[q.kind];
+      const exp = exps[q.kind];
+      el("powerHint").textContent = (q.dir === "forward")
+        ? `${name}正向：题目给 n，请输入 n${exp}（只填数字）`
+        : `${name}逆向：题目给 n${exp}，请输入底数 n（只填数字）`;
+      el("hint").textContent = (q.dir === "forward")
+        ? `${name}训练（正向）：只填结果数字`
+        : `${name}训练（逆向）：只填底数数字`;
+    }
   }
 }
 
 function newQuestion() {
+  if (state.nextTimer) {
+    clearTimeout(state.nextTimer);
+    state.nextTimer = null;
+  }
   clearMsg();
   syncUIByTraining();
 
-  state.q = pickQuestion();
+  let next = pickQuestion();
+  for (let i = 0; i < 12 && mistakeKey(next) === state.lastQuestionKey; i += 1) {
+    next = pickQuestion();
+  }
+  state.q = next;
+  state.lastQuestionKey = mistakeKey(next);
+  state.answered = false;
   questionEl.textContent = (state.q.kind === "pctfrac") ? state.q.display : state.q.prompt;
 
   state.startAt = performance.now();
@@ -527,16 +602,25 @@ function newQuestion() {
 function revealAnswer() {
   const q = state.q;
   if (!q) return;
+  if (state.answered) {
+    showMsg("本题已经判定，请点击“下一题”。", null);
+    return;
+  }
   if (q.kind === "pctfrac") {
     showMsg(`答案：${q.type === "p2f" ? (q.displayFrac || fracToString(q.ansFrac)) : q.ansP}`, null);
   } else {
     showMsg(`答案：${q.answer}`, null);
   }
+  state.answered = true;
 }
 
 function submit() {
   const q = state.q;
   if (!q) return;
+  if (state.answered) {
+    showMsg("本题已经提交，请点击“下一题”。", null);
+    return;
+  }
   const dtSec = (performance.now() - state.startAt) / 1000;
 
   let userRaw = "";
@@ -553,6 +637,7 @@ function submit() {
   } else {
     const v = powerOnly.value.trim();
     if (!v) { showMsg("只需要输入数字答案。", false); return; }
+    if (!/^\d+$/.test(v)) { showMsg("只需要输入整数数字。", false); return; }
     userRaw = v;
   }
 
@@ -575,14 +660,19 @@ function submit() {
       else { state.streak = 0; showMsg(`❌ 错误。正确答案：${q.ansP}`, false); addMistake(q); }
     }
   } else {
-    const user = String(parseInt(userRaw, 10));
-    if (user === "NaN") { state.total -= 1; showMsg("只需要输入整数数字。", false); return; }
+    const user = String(Number(userRaw));
     const ok = (user === q.answer);
     if (ok) { state.correct += 1; state.streak += 1; showMsg(`✅ 正确！用时 ${dtSec.toFixed(1)}s`, true); }
     else { state.streak = 0; showMsg(`❌ 错误。正确答案：${q.answer}`, false); addMistake(q); }
   }
 
+  state.answered = true;
   updateStats(dtSec);
+  if (q.kind !== "pctfrac" || state.correct > 0) {
+    // Keep the result visible briefly, then advance successful answers.
+    const lastWasCorrect = msgEl.classList.contains("ok");
+    if (lastWasCorrect) state.nextTimer = setTimeout(newQuestion, 850);
+  }
 }
 
 /** ---------- 事件 ---------- **/
@@ -621,9 +711,23 @@ el("clearMistakesBtn").addEventListener("click", () => {
   }
 });
 
+const supportDialog = el("supportDialog");
+el("supportBtn").addEventListener("click", () => {
+  if (typeof supportDialog.showModal === "function") supportDialog.showModal();
+  else supportDialog.setAttribute("open", "");
+});
+el("closeSupportBtn").addEventListener("click", () => supportDialog.close());
+supportDialog.addEventListener("click", (event) => {
+  if (event.target === supportDialog) supportDialog.close();
+});
+
 // 初始
 syncUIByTraining();
 newQuestion();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
 </script>
 </body>
 </html>
