@@ -1,0 +1,10 @@
+{
+  "name": "百分数与幂运算刷题",
+  "short_name": "刷题",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "zh-CN",
+  "icons": []
+}

@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <title>刷题：百分数、分数与幂运算</title>
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
@@ -39,6 +41,12 @@
     .item .top { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
     .tag { font-size:12px; padding:2px 8px; border-radius:999px; background:#1a2442; border:1px solid #2a3a63; opacity:.95; }
     .footer { margin-top:14px; font-size:12px; opacity:.7; text-align:center; }
+    .support { margin-top:14px; text-align:center; }
+    .support button { width:auto; min-width:150px; }
+    dialog { max-width:min(92vw, 420px); border:1px solid #2a3a63; border-radius:16px; background:#121b2e; color:#e8eefc; padding:18px; }
+    dialog::backdrop { background:rgba(0,0,0,.65); }
+    dialog img { display:block; width:100%; max-height:68vh; object-fit:contain; border-radius:10px; background:#fff; }
+    dialog .dialog-actions { margin-top:12px; text-align:right; }
     .sym {
       flex: 0 0 auto;
       text-align:center;
@@ -162,9 +170,20 @@
       <div class="list" id="mistakesList" style="margin-top:10px;"></div>
     </div>
 
+    <div class="support">
+      <button class="secondary" id="supportBtn" type="button">支持作者</button>
+    </div>
+
     <div class="footer">手机浏览器菜单 → “添加到主屏幕” 可像App一样使用。</div>
   </div>
 </div>
+
+<dialog id="supportDialog" aria-labelledby="supportTitle">
+  <h2 id="supportTitle">支持作者</h2>
+  <p class="small">如果这个工具对你有帮助，可以自愿支持。支持不会影响任何功能。</p>
+  <img src="assets-alipay.jpg" alt="支付宝收款二维码，请使用支付宝扫码" />
+  <div class="dialog-actions"><button class="secondary" id="closeSupportBtn" type="button">关闭</button></div>
+</dialog>
 
 <script>
 /** ---------- DOM ---------- **/
@@ -692,9 +711,23 @@ el("clearMistakesBtn").addEventListener("click", () => {
   }
 });
 
+const supportDialog = el("supportDialog");
+el("supportBtn").addEventListener("click", () => {
+  if (typeof supportDialog.showModal === "function") supportDialog.showModal();
+  else supportDialog.setAttribute("open", "");
+});
+el("closeSupportBtn").addEventListener("click", () => supportDialog.close());
+supportDialog.addEventListener("click", (event) => {
+  if (event.target === supportDialog) supportDialog.close();
+});
+
 // 初始
 syncUIByTraining();
 newQuestion();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
 </script>
 </body>
 </html>

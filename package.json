@@ -1,0 +1,7 @@
+{
+  "name": "remember-the-percentage",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/core.test.js"
+  }
+}
